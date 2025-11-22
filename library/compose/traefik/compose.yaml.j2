@@ -1,0 +1,125 @@
+services:
+  {{ service_name }}:
+    image: docker.io/library/traefik:v3.6.1
+    {% if not swarm_enabled %}
+    container_name: {{ container_name }}
+    security_opt:
+      - no-new-privileges:true
+    {% endif %}
+    hostname: {{ container_hostname }}
+    ports:
+      - "{{ ports_http }}:80"
+      - "{{ ports_https }}:443"
+      {% if dashboard_enabled %}
+      - "{{ ports_dashboard }}:8080"
+      {% endif %}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      {% if not swarm_enabled %}
+      - ./config/:/etc/traefik/:ro
+      - ./certs/:/var/traefik/certs/:rw
+      {% else %}
+      {% if swarm_volume_mode == 'mount' %}
+      - {{ swarm_volume_mount_path }}:/var/traefik/certs/:rw
+      {% elif swarm_volume_mode == 'local' %}
+      - traefik_certs:/var/traefik/certs/:rw
+      {% elif swarm_volume_mode == 'nfs' %}
+      - traefik_certs:/var/traefik/certs/:rw
+      {% endif %}
+      {% endif %}
+    {% if not swarm_enabled %}
+    env_file:
+      - ./.env
+    {% endif %}
+    environment:
+      - TZ={{ container_timezone }}
+      {% if traefik_tls_enabled %}
+      {% if traefik_tls_acme_provider == 'cloudflare' %}
+      {% if swarm_enabled %}
+      - CF_DNS_API_TOKEN_FILE=/run/secrets/{{ traefik_tls_acme_secret_name }}
+      {% else %}
+      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
+      {% endif %}
+      {% endif %}
+      {% endif %}
+    {% if swarm_enabled %}
+    configs:
+      - source: traefik_config
+        target: /etc/traefik/traefik.yaml
+      - source: traefik_middlewares
+        target: /etc/traefik/files/middlewares.yaml
+      - source: traefik_routers
+        target: /etc/traefik/files/routers.yaml
+      - source: traefik_services
+        target: /etc/traefik/files/services.yaml
+    {% endif %}
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - {{ traefik_network }}
+    {% if swarm_enabled %}
+    {% if traefik_tls_enabled %}
+    secrets:
+      - {{ traefik_tls_acme_secret_name }}
+    {% endif %}
+    deploy:
+      mode: {{ swarm_placement_mode }}
+      {% if swarm_placement_mode == 'replicated' %}
+      replicas: {{ swarm_replicas }}
+      {% endif %}
+      {% if swarm_placement_host %}
+      placement:
+        constraints:
+          - node.hostname == {{ swarm_placement_host }}
+      {% endif %}
+    {% else %}
+    restart: {{ restart_policy }}
+    {% endif %}
+
+{% if swarm_enabled %}
+{% if swarm_volume_mode in ['local', 'nfs'] %}
+volumes:
+  traefik_certs:
+    {% if swarm_volume_mode == 'nfs' %}
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr={{ swarm_volume_nfs_server }},nfsvers=4,{{ swarm_volume_nfs_options }}
+      device: ":{{ swarm_volume_nfs_path }}"
+    {% endif %}
+{% endif %}
+
+configs:
+  traefik_config:
+    file: ./config/traefik.yaml
+  traefik_middlewares:
+    file: ./config/files/middlewares.yaml
+  traefik_routers:
+    file: ./config/files/routers.yaml
+  traefik_services:
+    file: ./config/files/services.yaml
+
+{% if traefik_tls_enabled %}
+secrets:
+  {{ traefik_tls_acme_secret_name }}:
+    file: ./.env.secret
+{% endif %}
+{% endif %}
+
+networks:
+  {{ traefik_network }}:
+    {% if traefik_network_external %}
+    external: true
+    {% else %}
+    {% if swarm_enabled %}
+    driver: overlay
+    attachable: true
+    {% else %}
+    driver: bridge
+    {% endif %}
+    name: {{ traefik_network }}
+    {% endif %}

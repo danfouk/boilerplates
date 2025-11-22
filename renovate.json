@@ -1,7 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:base",
+    "config:recommended",
     ":dependencyDashboard",
     ":enableVulnerabilityAlertsWithLabel('security')",
     ":preserveSemverRanges",
@@ -11,6 +11,8 @@
   "labels": [
     "renovate"
   ],
+  "ignorePaths": [],
+  "useBaseBranchConfig": "merge",
   "packageRules": [
     {
       "groupName": "devDependencies (non-major)",
@@ -25,88 +27,140 @@
       ]
     },
     {
-      "description": "Update MariaDB or MySQL on a patch level only, bumps to major and minor versions might break compatibilty with an application",
+      "description": "Update MariaDB or MySQL on a patch level only, bumps to major and minor versions might break compatibility with an application",
       "enabled": false,
-      "managers": [
-        "docker-compose",
-        "dockerfile"
+      "matchManagers": [
+        "custom.regex"
       ],
       "matchUpdateTypes": [
         "major",
         "minor"
       ],
-      "packagePatterns": [
-        "^([^/]+\\/)*(mariadb|mysql)(:.+)?$"
+      "matchPackageNames": [
+        "/^([^/]+\\/)*(mariadb|mysql)(:.+)?$/"
       ]
     },
     {
-      "description": "Update PostgreSQL on a minor version or patch level only, bumps to major versions might break compatibilty with an application",
+      "description": "Update PostgreSQL on a minor version or patch level only, bumps to major versions might break compatibility with an application",
       "enabled": false,
-      "managers": [
-        "docker-compose",
-        "dockerfile"
+      "matchManagers": [
+        "custom.regex"
       ],
       "matchUpdateTypes": [
         "major"
       ],
-      "packagePatterns": [
-        "^([^/]+\\/)*postgres(:.+)?$"
+      "matchPackageNames": [
+        "/^([^/]+\\/)*postgres(:.+)?$/"
       ]
     },
     {
       "description": "Update MariaDB or PostgreSQL to the most recent release if they are standalone and not part of an application stack",
       "enabled": true,
-      "managers": [
-        "docker-compose",
-        "dockerfile"
+      "matchManagers": [
+        "custom.regex"
       ],
       "matchFileNames": [
-        "docker-compose/mariadb/**",
-        "docker-compose/postgres/**"
+        "library/compose/mariadb/**",
+        "library/compose/postgres/**"
       ],
       "matchUpdateTypes": [
         "major",
         "minor",
         "patch"
       ],
-      "packagePatterns": [
-        "^([^/]+\\/)*(mariadb|postgres)(:.+)?$"
+      "matchPackageNames": [
+        "/^([^/]+\\/)*(mariadb|postgres)(:.+)?$/"
+      ]
+    },
+    {
+      "description": "Do not match Canonical's Ubuntu version suffix as a compatibility hint",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)(\\.(?<patch>\\d+))?(?:-\\d+(?:\\.\\d+)+_edge)?$",
+      "matchPackageNames": [
+        "/^([^/]+\\/)*ubuntu/bind9(:.+)?$/"
+      ]
+    },
+    {
+      "description": "Catch a potential `security` suffix as part of the patch release as Grafana does not follow semver for security releases",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+(?:-security-\\d+)?)$",
+      "matchPackageNames": [
+        "/^([^/]+\\/)*grafana/grafana-oss(:.+)?$/"
       ]
     },
     {
       "description": "Over time Heimdall changed its versioning schema several times, ensure we only consider the current style",
-      "managers": [
-        "docker-compose",
-        "dockerfile"
+      "matchManagers": [
+        "custom.regex"
       ],
-      "packagePatterns": [
-        "^([^/]+\\/)*heimdall(:.+)?$"
-      ],
-      "versioning": "regex:^(?<major>\\d{1,2})\\.(?<minor>\\d+)(\\.(?<patch>\\d+))?$"
+      "versioning": "regex:^(?<major>\\d{1,2})\\.(?<minor>\\d+)(\\.(?<patch>\\d+))?$",
+      "matchPackageNames": [
+        "/^([^/]+\\/)*heimdall(:.+)?$/"
+      ]
     },
     {
       "description": "Track stable releases of Nginx only",
-      "managers": [
-        "docker-compose",
-        "dockerfile"
+      "matchManagers": [
+        "custom.regex"
       ],
-      "packagePatterns": [
-        "^([^/]+\\/)*nginx(:.+)?$"
-      ],
-      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d*[02468])(\\.(?<patch>\\d+))?(?:-(?<compatibility>.*))?$"
+      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d*[02468])(\\.(?<patch>\\d+))?(?:-(?<compatibility>.*))?$",
+      "matchPackageNames": [
+        "/^([^/]+\\/)*nginx(:.+)?$/"
+      ]
     },
     {
       "description": "Ignore erroneous version tags of Semaphore",
-      "managers": [
-        "docker-compose",
-        "dockerfile"
+      "matchManagers": [
+        "custom.regex"
       ],
-      "packagePatterns": [
-        "^([^/]+\\/)*semaphore(:.+)?$"
-      ],
-      "allowedVersions": "!/^v?2\\.19\\.10$/"
+      "allowedVersions": "!/^v?2\\.19\\.10$/",
+      "matchPackageNames": [
+        "/^([^/]+\\/)*semaphore(:.+)?$/"
+      ]
     }
   ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update Docker images in Jinja2 compose templates",
+      "fileMatch": [
+        "^library/compose/.+\\.j2$"
+      ],
+      "matchStrings": [
+        "image:\\s*(?<depName>[^:\\s]+):(?<currentValue>[^\\s\\n{]+)"
+      ],
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Update Docker images in Helm values.yaml (repository + tag pattern)",
+      "fileMatch": [
+        "^library/kubernetes/.+/helm/values\\.ya?ml$",
+        "^library/kubernetes/.+\\.j2$"
+      ],
+      "matchStrings": [
+        "repository:\\s*[\"']?(?<depName>[^:\\s\"']+)[\"']?\\s*\\n\\s*tag:\\s*[\"']?(?<currentValue>[^\\s\"']+)[\"']?"
+      ],
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Update Terraform/OpenTofu providers and modules in templates",
+      "fileMatch": [
+        "^library/terraform/.+\\.tf$",
+        "^library/terraform/.+\\.j2$"
+      ],
+      "matchStrings": [
+        "(?:source|module)\\s*=\\s*[\"'](?<depName>[^\"']+)[\"'](?:[\\s\\S]*?)version\\s*=\\s*[\"'](?<currentValue>[^\"']+)[\"']"
+      ],
+      "datasourceTemplate": "terraform-provider"
+    }
+  ],
+  "gitAuthor": "github-actions[bot] <github-actions[bot]@users.noreply.github.com>",
   "separateMinorPatch": true,
   "stopUpdatingLabel": "renovate/stop_updating"
 }

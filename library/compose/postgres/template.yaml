@@ -1,0 +1,40 @@
+---
+kind: compose
+metadata:
+  name: PostgreSQL
+  description: >
+    PostgreSQL is a powerful, open source object-relational database system with over 30 years of active development
+    that has earned it a strong reputation for reliability, feature robustness, and performance.
+
+
+    Project: https://www.postgresql.org/
+
+    Documentation: https://www.postgresql.org/docs/
+
+    GitHub: https://github.com/postgres/postgres
+  version: 17.6
+  author: Christian Lempa
+  date: '2025-09-28'
+  tags:
+    - database
+    - sql
+  draft: true
+spec:
+  general:
+    vars:
+      postgres_version:
+        type: str
+        description: PostgreSQL version
+        default: latest
+      postgres_secrets_enabled:
+        type: bool
+        description: "Enable Docker secrets for sensitive data"
+        default: false
+      postgres_initdb_args:
+        type: str
+        description: "PostgreSQL initialization arguments"
+        default: "--data-checksums"
+      postgres_host_auth_method:
+        type: str
+        description: "PostgreSQL host authentication method (leave empty for password-based)"
+        default: ""
